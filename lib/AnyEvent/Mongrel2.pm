@@ -112,6 +112,14 @@ sub send_response {
     $self->push_write($msg);
 }
 
+sub defer_response {
+    my ($self, $code, $uuid, @to) = @_;
+    my $to = join ' ', @to;
+    $self->push_write(sub {
+        return sprintf("%s %d:%s, %s", $uuid, length $to, $to, $code->());
+    });
+}
+
 sub call_handler {
     my ($self, $h, $msg) = @_;
     my $req = $self->parse_request($msg);
