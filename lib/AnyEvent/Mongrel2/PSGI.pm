@@ -132,6 +132,13 @@ sub handle_request {
         return;
     }
 
+    my $host = $headers->{http}{host} || 'unknown.invalid:80';
+    my ($h, $p) = split /:/, $host;
+    $h ||= 'unknown.invalid';
+    $p ||= 80;
+    $env{SERVER_NAME} = $h;
+    $env{SERVER_PORT} = $p;
+
     $env{REQUEST_METHOD}  = delete $headers->{mongrel}{method};
     $env{SCRIPT_NAME}     = delete $headers->{mongrel}{path};
     $env{PATH_INFO}       = uri_unescape($req->{path});
