@@ -195,7 +195,7 @@ sub handle_request {
             my $msg = join ' ', $env{SERVER_PROTOCOL}, $code, status_message($code);
             $msg .= "\r\n".$self->_join_headers(@{$headers})."\r\n";
 
-            if(_HANDLE($body)){
+            if(_HANDLE($body) || blessed $body){
                 $send->($msg);
                 my $line;
                 while(defined($line = $body->getline)){
