@@ -19,16 +19,10 @@ my $m2 = AnyEvent::Mongrel2->new(
     request_endpoint  => 'tcp://127.0.0.1:1234',
     response_endpoint => 'tcp://127.0.0.1:1235',
     handler           => sub {
-        my ($m2, $send, $req) = @_;
+        my ($m2, $req) = @_;
 
-        # you can call send as many times as you like
-        my $first = "HTTP/1.1 200 OK\r\n";
-        $send->($first, $req->{uuid}, $req->{id});
-        my $more  = "Content-Length: 13\r\n";
-        $send->($more, $req->{uuid}, $req->{id});
-        $more = "\r\n";
-        $send->($more, $req->{uuid}, $req->{id});
-        $send->("Hello, world!", $req->{uuid}, $req->{id});
+        my $res = "HTTP/1.0 200 OK\r\nContent-Length: 13\r\n\r\nHello, world!";
+        $m2->send_response($res, $req->{uuid}, $req->{id});
     },
 );
 

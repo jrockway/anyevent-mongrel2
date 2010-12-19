@@ -111,7 +111,7 @@ sub send_response {
 sub call_handler {
     my ($self, $h, $msg) = @_;
     my $req = $self->parse_request($msg);
-    $self->handler->($self, sub { $self->send_response(@_) }, $req);
+    $self->handler->($self, $req);
 }
 
 __PACKAGE__->meta->make_immutable;
