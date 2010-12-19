@@ -21,9 +21,20 @@ has [qw/request_endpoint response_endpoint/] => (
 );
 
 has 'handler' => (
-    is       => 'ro',
-    isa      => 'CodeRef',
-    required => 1,
+    is        => 'rw',
+    isa       => 'CodeRef',
+    predicate => 'has_handler',
+    trigger   => sub {
+        # basically, we can't handle connections until we have a
+        # handler, so we don't create the sockets until one is set.
+        # this lets higher level sugar layers (PSGI/Plack) easily
+        # has_a mongrel2
+        my ($self, $new, $old) = @_;
+        if(!$old){
+            $self->request_source;
+            $self->response_sink;
+        }
+    }
 );
 
 has 'context' => (
@@ -73,12 +84,6 @@ around 'push_write' => sub {
     $self->$orig($msg, topic => $self->response_identity);
 };
 
-sub BUILD {
-    my $self = shift;
-    $self->request_source;
-    $self->response_sink;
-}
-
 sub parse_request {
     my ($self, $msg) = @_;
     my ($uuid, $id, $path, $rest) = split /[[:space:]]/, $msg, 4;
@@ -110,7 +115,7 @@ sub send_response {
 sub call_handler {
     my ($self, $h, $msg) = @_;
     my $req = $self->parse_request($msg);
-    $self->handler->($self, $req);
+    $self->handler->($self, $req) if $self->has_handler;
 }
 
 __PACKAGE__->meta->make_immutable;
