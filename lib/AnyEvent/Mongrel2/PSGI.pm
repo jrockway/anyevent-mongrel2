@@ -32,8 +32,17 @@ has 'error_stream' => (
     default => sub { \*STDERR },
 );
 
+has 'coro' => (
+    is      => 'ro',
+    isa     => 'Bool',
+    default => 0,
+);
+
 sub BUILD {
     my $self = shift;
+
+    if($self->coro){ require Coro }
+
     $self->mongrel2->handler(sub {
         my ($m2, $req) = @_;
 
@@ -138,7 +147,7 @@ sub handle_request {
     $env{'psgi.url_scheme'}   = 'http'; # XXX
     $env{'psgi.error'}        = $self->error_stream;
     $env{'psgi.input'}        = $self->_handleize_body($req);
-    $env{'psgi.multithread'}  = 0; # XXX: could be
+    $env{'psgi.multithread'}  = $self->coro;
     $env{'psgi.multiprocess'} = 0; # XXX: could be
     $env{'psgi.run_once'}     = 0;
     $env{'psgi.nonblocking'}  = 1;
@@ -146,87 +155,90 @@ sub handle_request {
     $env{'mongrel.uuid'}      = $uuid;
     $env{'mongrel.id'}        = $id;
 
-    my $res = try {
-        $self->app->(\%env);
-    }
-    catch {
-        [ 500, [ 'Content-Type' => 'text/plain' ], [ 'Exception: ', $_ ] ];
-    };
+    my $wrap = sub { $_[0]->() };
+    $wrap = \&Coro::async if $self->coro;
 
-    my $is_closed = 0;
-
-    my $send = sub {
-        my $data = join '', @_;
-        confess 'already closed connection'
-            if $is_closed != 0;
-
-        $self->mongrel2->send_response($data, $uuid, $id);
-    };
-
-    my $close = sub {
-        confess 'already closed connection'
-            if $is_closed != 0;
-
-        $send->('');
-    };
-
-    my $send_headers = sub {
-        my ($code, $headers, $body) = @_;
-        my $msg = join ' ', $env{SERVER_PROTOCOL}, $code, status_message($code);
-        $msg .= "\r\n".$self->_join_headers(@{$headers})."\r\n";
-
-        if(_HANDLE($body)){
-            $send->($msg);
-            my $line;
-            while(defined($line = $body->getline)){
-                $send->($line);
-            }
-            $body->close;
+    $wrap->(sub {
+        my $res = try {
+            $self->app->(\%env);
         }
-        elsif(_ARRAYLIKE($body)){
-            $send->($msg, join '', @$body);
+        catch {
+            [ 500, [ 'Content-Type' => 'text/plain' ], [ 'Exception: ', $_ ] ];
+        };
+
+        my $is_closed = 0;
+
+        my $send = sub {
+            my $data = join '', @_;
+            confess 'already closed connection'
+                if $is_closed != 0;
+
+            $self->mongrel2->send_response($data, $uuid, $id);
+        };
+
+        my $close = sub {
+            confess 'already closed connection'
+                if $is_closed != 0;
+
+            $send->('');
+        };
+
+        my $send_headers = sub {
+            my ($code, $headers, $body) = @_;
+            my $msg = join ' ', $env{SERVER_PROTOCOL}, $code, status_message($code);
+            $msg .= "\r\n".$self->_join_headers(@{$headers})."\r\n";
+
+            if(_HANDLE($body)){
+                $send->($msg);
+                my $line;
+                while(defined($line = $body->getline)){
+                    $send->($line);
+                }
+                $body->close;
+            }
+            elsif(_ARRAYLIKE($body)){
+                $send->($msg, join '', @$body);
+            }
+            else {
+                confess "Bad body: must be ARRAYLIKE or HANDLE, not '$_'";
+            }
+        };
+
+        if(_ARRAYLIKE($res)){
+            $send_headers->(@$res);
+            $close->();
+        }
+        elsif(_CODELIKE($res)){
+            my $respond = sub {
+                my $arg = shift;
+                confess 'value passed by app to respond callback is not an array!'
+                    unless _ARRAYLIKE($arg);
+
+                my ($code, $headers, $body) = @$arg;
+                if($body){
+                    $send_headers->($code, $headers, $body);
+                    $close->();
+                    return;
+                }
+
+                $send_headers->($code, $headers, []);
+                return AnyEvent::Mongrel2::PSGI::Writer->new(
+                    $send,
+                    sub {
+                        my $cb = shift;
+                        $self->mongrel2->defer_response(
+                            $cb, $uuid, $id,
+                        );
+                    },
+                    $close,
+                );
+            };
+            $res->($respond);
         }
         else {
-            confess "Bad body: must be ARRAYLIKE or HANDLE, not '$_'";
+            confess "Your app must return a CODE or ARRAY ref, not $res";
         }
-    };
-
-    if(_ARRAYLIKE($res)){
-        $send_headers->(@$res);
-        $close->();
-    }
-    elsif(_CODELIKE($res)){
-        my $respond = sub {
-            my $arg = shift;
-            confess 'value passed by app to respond callback is not an array!'
-                unless _ARRAYLIKE($arg);
-
-            my ($code, $headers, $body) = @$arg;
-            if($body){
-                $send_headers->($code, $headers, $body);
-                $close->();
-                return;
-            }
-
-            $send_headers->($code, $headers, []);
-            return AnyEvent::Mongrel2::PSGI::Writer->new(
-                $send,
-                sub {
-                    my $cb = shift;
-                    $self->mongrel2->defer_response(
-                        $cb, $uuid, $id,
-                    );
-                },
-                $close,
-            );
-        };
-        $res->($respond);
-    }
-    else {
-        confess "Your app must return a CODE or ARRAY ref, not $res";
-    }
-
-    # NICE.
+    });
 }
 
 __PACKAGE__->meta->make_immutable;
