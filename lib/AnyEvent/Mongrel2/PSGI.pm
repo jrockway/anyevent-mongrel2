@@ -145,7 +145,7 @@ sub handle_request {
 
     $env{'psgi.version'}      = [1,0];
     $env{'psgi.url_scheme'}   = 'http'; # XXX
-    $env{'psgi.error'}        = $self->error_stream;
+    $env{'psgi.errors'}       = $self->error_stream;
     $env{'psgi.input'}        = $self->_handleize_body($req);
     $env{'psgi.multithread'}  = $self->coro;
     $env{'psgi.multiprocess'} = 0; # XXX: could be
