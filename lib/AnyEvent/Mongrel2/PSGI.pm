@@ -45,7 +45,6 @@ sub BUILD {
 
     $self->mongrel2->handler(sub {
         my ($m2, $req) = @_;
-
         $self->handle_request($m2, $req);
     });
 }
@@ -96,9 +95,14 @@ sub _http_headers {
 }
 
 sub _handleize_body {
-    my ($self, $req) = @_;
-    # TODO: if it's an upload, open the actual file?
-    open my $fh, '<', \$req->{body} or die "cannot open body as scalar: $!";
+    my ($self, $req, $headers) = @_;
+    my $fh;
+    if(my $file = $headers->{http}{'x-mongrel2-upload-start'}){
+        open $fh, '<', $file or die "cannot open upload '$file': $!";
+    }
+    else {
+        open $fh, '<', \$req->{body} or die "cannot open body as scalar: $!";
+    }
     return $fh;
 }
 
@@ -153,7 +157,7 @@ sub handle_request {
     $env{'psgi.version'}      = [1,0];
     $env{'psgi.url_scheme'}   = 'http'; # XXX
     $env{'psgi.errors'}       = $self->error_stream;
-    $env{'psgi.input'}        = $self->_handleize_body($req);
+    $env{'psgi.input'}        = $self->_handleize_body($req, $headers);
     $env{'psgi.multithread'}  = $self->coro;
     $env{'psgi.multiprocess'} = 0; # XXX: could be
     $env{'psgi.run_once'}     = 0;
