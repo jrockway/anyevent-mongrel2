@@ -7,8 +7,7 @@ use namespace::autoclean;
 use AnyEvent::ZeroMQ::Publish;
 use AnyEvent::ZeroMQ::Pull;
 
-use JSON::XS;
-use Scalar::Util qw(weaken);
+use AnyEvent::ZeroMQ::Types qw(Endpoint);
 
 has [qw/request_identity response_identity/] => (
     is      => 'ro',
@@ -17,7 +16,7 @@ has [qw/request_identity response_identity/] => (
 
 has [qw/request_endpoint response_endpoint/] => (
     is       => 'ro',
-    isa      => 'Str',
+    isa      => Endpoint,
     required => 1,
 );
 
