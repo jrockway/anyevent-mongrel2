@@ -2,3 +2,5 @@ cover_db
 TAGS
 AnyEvent-Mongrel2*
 .build
+/examples/hello/config.sqlite
+/examples/hello/run/*
