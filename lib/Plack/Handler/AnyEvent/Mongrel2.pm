@@ -11,7 +11,7 @@ use ZeroMQ::Raw::Context;
 
 use Carp::Always;
 
-my $coro = eval "require Coro; 1";
+my $have_coro = eval "require Coro; 1";
 
 sub _fix {
     my $str = shift;
@@ -35,9 +35,10 @@ sub _build_m2 {
 
 sub _start_app {
     my ($self, $app) = @_;
+    my $use_coro = $have_coro && $self->{'coro'};
     return AnyEvent::Mongrel2::PSGI->new(
         mongrel2 => $self->_build_m2,
-        coro     => $coro,
+        coro     => $use_coro,
         app      => $app,
     );
 }
@@ -64,9 +65,12 @@ command-line is kind of long:
     plackup app.psgi -s AnyEvent::Mongrel2       \
         --request-endpoint tcp://127.0.0.1:1234  \
         --response-endpoint tcp://127.0.0.1:1235 \
-        --request-identity 5fb4feb1-d690-46f9-ba50-4a11f96fe720
+        --request-identity 5fb4feb1-d690-46f9-ba50-4a11f96fe720 \
+        --coro 1
 
 The command-line args you can pass are the INITARGS that you'd pass
 when instantiating L<AnyEvent::Mongrel2>.
 
-If you have Coro on your system, it will be used automatically.
+Set Coro to 1 if you want C<psgi.multithread>.  This will cause each
+request to occur in its own coroutine, which can block without
+blocking the other coroutines.
