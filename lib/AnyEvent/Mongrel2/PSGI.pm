@@ -17,6 +17,7 @@ use namespace::autoclean;
 has 'mongrel2' => (
     is       => 'ro',
     isa      => 'AnyEvent::Mongrel2',
+    handles  => [qw/send_response defer_response/],
     required => 1,
 );
 
@@ -185,7 +186,7 @@ sub handle_request {
             confess 'already closed connection'
                 if $is_closed != 0;
 
-            $self->mongrel2->send_response($data, $uuid, $id);
+            $self->send_response($data, $uuid, $id);
         };
 
         my $close = sub {
@@ -238,7 +239,7 @@ sub handle_request {
                     $send,
                     sub {
                         my $cb = shift;
-                        $self->mongrel2->defer_response(
+                        $self->defer_response(
                             $cb, $uuid, $id,
                         );
                     },
