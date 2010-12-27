@@ -61,6 +61,8 @@ sub _decode_headers {
         my $key   = shift @headers;
         my $value = shift @headers // confess 'invalid header array: odd';
 
+        $value = join ', ', @$value if(ref $value);
+
         if(uc $key eq $key){
             $mongrel{lc $key} = $value;
         }
