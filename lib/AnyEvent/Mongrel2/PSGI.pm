@@ -151,7 +151,7 @@ sub handle_request {
     $env{SERVER_PROTOCOL} = delete $headers->{mongrel}{version};
     for my $k (keys %{$headers->{mongrel}}){
         # future-proof!  this gets stuff like pattern
-        $env{"mongrel.$k"} = $headers->{mongrel}{$k};
+        $env{"mongrel2.$k"} = $headers->{mongrel}{$k};
     }
 
     $env{'psgi.version'}      = [1,0];
@@ -163,8 +163,9 @@ sub handle_request {
     $env{'psgi.run_once'}     = 0;
     $env{'psgi.nonblocking'}  = 1;
     $env{'psgi.streaming'}    = 1;
-    $env{'mongrel.uuid'}      = $uuid;
-    $env{'mongrel.id'}        = $id;
+    $env{'mongrel2.uuid'}     = $uuid;
+    $env{'mongrel2.id'}       = $id;
+    $env{'mongrel2'}  = $self->mongrel2;
 
     my $wrap = sub { $_[0]->() };
     $wrap = \&Coro::async if $self->coro;
