@@ -26,9 +26,9 @@ has 'handler' => (
     predicate => 'has_handler',
     trigger   => sub {
         # basically, we can't handle connections until we have a
-        # handler, so we don't create the sockets until one is set.
-        # this lets higher level sugar layers (PSGI/Plack) easily
-        # has_a mongrel2
+        # handler, so we don't create the sockets until a handler is
+        # provided.  this lets you write a request handling-object
+        # that has_a its mongrel2 server.
         my ($self, $new, $old) = @_;
         if(!$old){
             $self->request_source;
