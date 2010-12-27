@@ -119,8 +119,7 @@ sub _compute_response {
 
 sub send_response {
     my ($self, $chunk, $uuid, @to) = @_;
-    confess 'usage: $mong2->send_response($chunk, $uuid, @to)'
-        if !$uuid || !@to;
+    return unless @to > 0;
 
     # mongrel2 says it will send to 128 clients at a time, so
     # partition @to into 128 recipient chunks
