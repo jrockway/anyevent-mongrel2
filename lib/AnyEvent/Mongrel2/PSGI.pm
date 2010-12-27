@@ -141,12 +141,13 @@ sub handle_request {
     my ($h, $p) = split /:/, $host;
     $h ||= 'unknown.invalid';
     $p ||= 80;
+
     $env{SERVER_NAME} = $h;
     $env{SERVER_PORT} = $p;
 
-    $env{REQUEST_METHOD}  = delete $headers->{mongrel}{method};
-    $env{SCRIPT_NAME}     = delete $headers->{mongrel}{path};
+    $env{SCRIPT_NAME}     = ''; # was delete $headers->{mongrel}{path}, which is too much
     $env{PATH_INFO}       = uri_unescape($req->{path});
+    $env{REQUEST_METHOD}  = delete $headers->{mongrel}{method};
     $env{REQUEST_URI}     = delete $headers->{mongrel}{uri};
     $env{QUERY_STRING}    = delete $headers->{mongrel}{query};
     $env{SERVER_PROTOCOL} = delete $headers->{mongrel}{version};
