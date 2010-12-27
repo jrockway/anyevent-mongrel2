@@ -4,3 +4,6 @@ AnyEvent-Mongrel2*
 .build
 /examples/hello/config.sqlite
 /examples/hello/run/*
+/examples/chat/config.sqlite
+/examples/chat/mongrel2.pid
+/examples/chat/share/access.log
