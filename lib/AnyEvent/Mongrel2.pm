@@ -91,7 +91,7 @@ sub parse_request {
     my ($uuid, $id, $path, $rest) = split /[[:space:]]/, $msg, 4;
     my @rest;
     # decode headers and body, which are both netstrings
-    while($rest =~ /^(\d+):(.+)$/g){
+    while($rest =~ /^(\d+):(.+)$/sg){
         my ($data, $comma, $more) = unpack "A$1 A A*", $2;
         confess 'invalid netstring' unless $comma eq ',';
         $rest = $more;
