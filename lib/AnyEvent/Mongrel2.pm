@@ -4,6 +4,8 @@ use Moose;
 use true;
 use namespace::autoclean;
 
+use List::MoreUtils qw(natatime);
+
 use AnyEvent::ZeroMQ::Publish;
 use AnyEvent::ZeroMQ::Pull;
 
@@ -105,18 +107,45 @@ sub parse_request {
     }
 }
 
-sub send_response {
+sub _compute_response {
     my ($self, $chunk, $uuid, @to) = @_;
+
+    # note that we don't validate the length of @to; that's up to the
+    # caller
     my $to = join ' ', @to;
     my $msg = sprintf("%s %d:%s, %s", $uuid, length $to, $to, $chunk);
-    $self->push_write($msg);
+    return $msg;
+}
+
+sub send_response {
+    my ($self, $chunk, $uuid, @to) = @_;
+    confess 'usage: $mong2->send_response($chunk, $uuid, @to)'
+        if !$uuid || !@to;
+
+    # mongrel2 says it will send to 128 clients at a time, so
+    # partition @to into 128 recipient chunks
+    my $chunker = natatime 128, @to;
+    while(my @chunk_to = $chunker->()){
+        my $msg = $self->_compute_response($chunk, $uuid, @chunk_to);
+        $self->push_write($msg);
+    }
 }
 
 sub defer_response {
     my ($self, $code, $uuid, @to) = @_;
     my $to = join ' ', @to;
+
+    # this situation is best left to the user, as there is no good
+    # default behavior.  my advice is to just precompute the result
+    # unless it's a 200GB movie or something.  and in that case, maybe
+    # convince the internet to support multicast properly instead of
+    # streaming a 200GB movie to 129 client with perl.  JMHO.
+    confess 'too many recipients for defer_response, max 128'
+        if @to > 128;
+
     $self->push_write(sub {
-        return sprintf("%s %d:%s, %s", $uuid, length $to, $to, $code->());
+        my $chunk = $code->();
+        return
     });
 }
 
