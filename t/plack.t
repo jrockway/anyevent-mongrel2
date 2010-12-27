@@ -74,5 +74,6 @@ END {
     my $pid = eval { file('m2.pid')->slurp } || file('/tmp/m2.pid')->slurp;
     chomp $pid;
     diag "killing $pid";
-    kill 9, $pid or warn "$!";
+    kill 9, $pid;
+    unlink file('m2.pid'), file('/tmp/m2.pid');
 }
