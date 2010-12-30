@@ -11,6 +11,9 @@ use AnyEvent::ZeroMQ::Pull;
 
 use AnyEvent::ZeroMQ::Types qw(Endpoint);
 
+with 'MooseX::Traits';
+has '+_trait_namespace' => ( default => __PACKAGE__.'::Trait' );
+
 has [qw/request_identity response_identity/] => (
     is      => 'ro',
     isa     => 'Str',
@@ -151,6 +154,7 @@ sub defer_response {
 sub call_handler {
     my ($self, $h, $msg) = @_;
     my $req = $self->parse_request($msg);
+    return if exists $req->{stop} && $req->{stop};
     $self->handler->($self, $req) if $self->has_handler;
 }
 
