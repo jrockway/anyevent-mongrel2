@@ -28,7 +28,7 @@ sub new {
 sub _build_m2 {
     my $self = shift;
     $self->{context} ||= ZeroMQ::Raw::Context->new( threads => 1 );
-    return AnyEvent::Mongrel2->new(
+    return AnyEvent::Mongrel2->with_traits('ParseHeaders', 'WithHandles')->new(
         %$self,
     );
 }
@@ -36,6 +36,7 @@ sub _build_m2 {
 sub _start_app {
     my ($self, $app) = @_;
     my $use_coro = $have_coro && $self->{'coro'};
+
     return AnyEvent::Mongrel2::PSGI->new(
         mongrel2 => $self->_build_m2,
         coro     => $use_coro,

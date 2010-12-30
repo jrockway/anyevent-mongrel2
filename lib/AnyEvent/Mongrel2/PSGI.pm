@@ -17,7 +17,6 @@ use namespace::autoclean;
 has 'mongrel2' => (
     is       => 'ro',
     isa      => 'AnyEvent::Mongrel2',
-    handles  => [qw/send_response defer_response/],
     required => 1,
 );
 
@@ -50,33 +49,19 @@ sub BUILD {
     });
 }
 
-# override if you want different parsing
-sub _decode_headers {
-    my ($self, $headers_str) = @_;
+sub _partition_headers {
+    my ($self, $headers) = @_;
 
     my (%mongrel, %http);
-    # TODO: parse mongrel request headers as an array, not as a dict.
-    my @headers = %{ decode_json($headers_str) };
-    while (@headers) {
-        my $key   = shift @headers;
-        my $value = shift @headers // confess 'invalid header array: odd';
-
-        $value = join ', ', @$value if(ref $value);
-
-        if(uc $key eq $key){
-            $mongrel{lc $key} = $value;
+    for my $key (keys %$headers){
+        if($key eq uc $key){
+            $mongrel{lc $key} = $headers->{$key};
         }
         else {
-            exists $http{$key}
-                ? $http{$key} .= ", $value"
-                : $http{$key} = $value;
+            $http{lc $key} = $headers->{$key};
         }
     }
-
-    return {
-        mongrel => \%mongrel,
-        http    => \%http,
-    };
+    return { mongrel => \%mongrel, http => \%http };
 }
 
 # translate { foo-bar => 'baz' } to { HTTP_FOO_BAR => 'baz' }
@@ -123,21 +108,12 @@ sub _join_headers {
     return $buf;
 }
 
-# this is basically a disconnect event, which PSGI does not understand
-# or care about.
-sub handle_json {}
-
-sub handle_request {
-    my ($self, $m2, $req) = @_;
+sub build_env {
+    my ($self, $req) = @_;
 
     my ($uuid, $id) = ($req->{uuid}, $req->{id});
-    my $headers = $self->_decode_headers($req->{headers});
+    my $headers = $self->_partition_headers($req->{headers});
     my %env = $self->_http_headers($headers->{http});
-
-    if($headers->{mongrel}{method} eq 'JSON'){
-        $self->handle_json($req->{body});
-        return;
-    }
 
     my $host = $headers->{http}{host} || 'unknown.invalid:80';
     my ($h, $p) = split /:/, $host;
@@ -167,62 +143,58 @@ sub handle_request {
     $env{'psgi.run_once'}     = 0;
     $env{'psgi.nonblocking'}  = 1;
     $env{'psgi.streaming'}    = 1;
+    $env{'psgix.io'}          = $req->{handle};
     $env{'mongrel2.uuid'}     = $uuid;
     $env{'mongrel2.id'}       = $id;
-    $env{'mongrel2'}  = $self->mongrel2;
 
-    my $wrap = sub { $_[0]->() };
-    $wrap = \&Coro::async if $self->coro;
+    return \%env;
+}
 
-    $wrap->(sub {
+sub send_headers {
+    my ($self, $env, $code, $headers, $body) = @_;
+    my $handle = $env->{'psgix.io'};
+
+    my $msg = join ' ', $env->{SERVER_PROTOCOL}, $code, status_message($code);
+    $msg .= "\r\n".$self->_join_headers(@{$headers})."\r\n";
+
+    if(_HANDLE($body) || blessed $body){
+        $handle->write($msg);
+        my $line;
+        while(defined($line = $body->getline)){
+            $handle->write($line);
+        }
+        $body->close;
+    }
+    elsif(_ARRAYLIKE($body)){
+        $handle->write($msg . join('', @$body));
+    }
+    else {
+        confess "Bad body: must be ARRAYLIKE or HANDLE, not '$_'";
+    }
+
+    return;
+}
+
+
+sub handle_request {
+    my ($self, $m2, $req) = @_;
+
+    my $respond = sub {
+        my $env = shift;
         my $res = try {
-            $self->app->(\%env);
+            $self->app->($env);
         }
         catch {
             [ 500, [ 'Content-Type' => 'text/plain' ], [ 'Exception: ', $_ ] ];
         };
 
-        my $is_closed = 0;
-
-        my $send = sub {
-            my $data = join '', @_;
-            confess 'already closed connection'
-                if $is_closed != 0;
-
-            $self->send_response($data, $uuid, $id);
-        };
-
-        my $close = sub {
-            confess 'already closed connection'
-                if $is_closed != 0;
-
-            $send->('');
-        };
-
-        my $send_headers = sub {
-            my ($code, $headers, $body) = @_;
-            my $msg = join ' ', $env{SERVER_PROTOCOL}, $code, status_message($code);
-            $msg .= "\r\n".$self->_join_headers(@{$headers})."\r\n";
-
-            if(_HANDLE($body) || blessed $body){
-                $send->($msg);
-                my $line;
-                while(defined($line = $body->getline)){
-                    $send->($line);
-                }
-                $body->close;
-            }
-            elsif(_ARRAYLIKE($body)){
-                $send->($msg, join '', @$body);
-            }
-            else {
-                confess "Bad body: must be ARRAYLIKE or HANDLE, not '$_'";
-            }
-        };
+        # note: we are relying on the handle's DEMOLISH method to
+        # close the connection for us.  if you change how handles or
+        # DEMOLISH work, make sure you send the mongrel2 kill message,
+        # the empty string, after sending all headers/body.
 
         if(_ARRAYLIKE($res)){
-            $send_headers->(@$res);
-            $close->();
+            $self->send_headers($env, @$res);
         }
         elsif(_CODELIKE($res)){
             my $respond = sub {
@@ -231,30 +203,31 @@ sub handle_request {
                     unless _ARRAYLIKE($arg);
 
                 my ($code, $headers, $body) = @$arg;
-                if($body){
-                    $send_headers->($code, $headers, $body);
-                    $close->();
-                    return;
-                }
+                my $body_defined = defined $body;
+                $body ||= [];
 
-                $send_headers->($code, $headers, []);
-                return AnyEvent::Mongrel2::PSGI::Writer->new(
-                    $send,
-                    sub {
-                        my $cb = shift;
-                        $self->defer_response(
-                            $cb, $uuid, $id,
-                        );
-                    },
-                    $close,
-                );
+                $self->send_headers($env, $code, $headers, $body);
+
+                return $env->{'psgix.io'} if !$body_defined; # streaming response
+                return;
             };
             $res->($respond);
         }
         else {
             confess "Your app must return a CODE or ARRAY ref, not $res";
         }
-    });
+    };
+
+    my $env = $self->build_env($req);
+
+    if( $self->coro ){
+        Coro::async({ $respond->($env) });
+    }
+    else {
+        $respond->($env);
+    }
+
+    return;
 }
 
 __PACKAGE__->meta->make_immutable;
