@@ -2,7 +2,6 @@ package AnyEvent::Mongrel2::PSGI;
 # ABSTRACT: run a PSGI app with AnyEvent::Mongrel2
 use Moose;
 
-use AnyEvent::Mongrel2::PSGI::Writer;
 use HTTP::Status qw(status_message);
 use JSON::XS;
 use Params::Util qw(_CODELIKE _ARRAYLIKE _HANDLE);
