@@ -27,6 +27,7 @@ around 'parse_request' => sub {
     my ($orig, $self, @args) = @_;
     my $hash = $self->$orig(@args);
 
+    my $first_time = 0;
     my $handle = $self->_get_handle_for($hash->{id});
     if(!$handle){
         $handle = AnyEvent::Mongrel2::Handle->new(
@@ -36,6 +37,7 @@ around 'parse_request' => sub {
             path     => $hash->{path},
         );
         $self->_register_handle($handle);
+        $first_time = 1;
     }
 
     if($hash->{headers}{METHOD} eq 'JSON'){
@@ -43,8 +45,14 @@ around 'parse_request' => sub {
         if( $hash->{json_body}{type} eq 'disconnect' ){
             $handle->is_connected(0);
             $handle->is_shutdown(1);
+            delete $self->handles->{$hash->{id}};
+            $hash->{stop} = 1;
+
         }
-        $hash->{stop} = 1;
+        else {
+            $handle->_inject_message($hash->{json_body});
+            $hash->{stop} = 1 unless $first_time;
+        }
     }
 
     $hash->{handle} = $handle;
