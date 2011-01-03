@@ -124,12 +124,20 @@ sub send_response {
     my ($self, $chunk, $uuid, @to) = @_;
     return unless @to > 0;
 
-    # mongrel2 says it will send to 128 clients at a time, so
-    # partition @to into 128 recipient chunks
-    my $chunker = natatime 128, @to;
-    while(my @chunk_to = $chunker->()){
-        my $msg = $self->_compute_response($chunk, $uuid, @chunk_to);
-        $self->push_write($msg);
+    if(@to > 128){
+        # mongrel2 says it will send to 128 clients at a time, so
+        # partition @to into 128 recipient chunks
+        my $chunker = natatime 128, @to;
+        while(my @chunk_to = $chunker->()){
+            my $msg = $self->_compute_response($chunk, $uuid, @chunk_to);
+            $self->push_write($msg);
+        }
+    }
+    else {
+        # profiling reveals that this micro-optimization is worthwhile.
+        $self->push_write(
+            $self->_compute_response($chunk, $uuid, @to),
+        );
     }
 }
 
