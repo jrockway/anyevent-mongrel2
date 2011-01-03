@@ -220,7 +220,7 @@ sub handle_request {
     my $env = $self->build_env($req);
 
     if( $self->coro ){
-        Coro::async({ $respond->($env) });
+        &Coro::async($respond, $env);
     }
     else {
         $respond->($env);
