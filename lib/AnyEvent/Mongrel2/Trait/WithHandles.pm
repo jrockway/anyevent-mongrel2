@@ -46,7 +46,9 @@ around 'parse_request' => sub {
         $first_time = 1;
     }
 
-    if($hash->{headers}{METHOD} eq 'JSON'){
+    my $inject;
+
+    if($type eq 'JSON'){
         $hash->{json_body} = decode_json($hash->{body});
 
         no warnings 'uninitialized';
@@ -58,9 +60,18 @@ around 'parse_request' => sub {
 
         }
         else {
-            $handle->_inject_message($hash->{json_body});
-            $hash->{stop} = 1 unless $first_time;
+            $inject = $hash->{json_body};
         }
+    }
+    elsif($type eq 'XML'){
+        # i really don't want to page in XML::LibXML2 just for a
+        # feature nobody will ever use, so parse this yourself.
+        $inject = { xml => $hash->{body} };
+    }
+
+    if(defined $inject){
+        $handle->_inject_message($inject);
+        $hash->{stop} = 1 unless $first_time;
     }
 
     $hash->{handle} = $handle;
