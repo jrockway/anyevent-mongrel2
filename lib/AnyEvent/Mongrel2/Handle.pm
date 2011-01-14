@@ -60,7 +60,7 @@ before [qw/close write/] => sub { $_[0]->assert_connected };
 sub write {
     my ($self, $data) = @_;
     if(ref $data){
-        $self->defer_resposne( $data, $self->uuid, $self->id );
+        $self->defer_response( $data, $self->uuid, $self->id );
     }
     else {
         $self->send_response( $data, $self->uuid, $self->id );
