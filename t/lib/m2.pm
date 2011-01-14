@@ -6,6 +6,8 @@ use true;
 use Test::More;
 use Sub::Exporter -setup => { exports => ['m2'] };
 
+use POSIX qw(dup2);
+
 my ($called, $config, $database);
 
 sub m2() {
@@ -54,6 +56,10 @@ servers = [main]
 EOF
     close $ch;
 
+    open my $devnull, '>', '/dev/null' or die "devnull: $!";
+    dup2(fileno $devnull, 1) or die "dup2: $!";
+    dup2(fileno $devnull, 2) or die "dup2: $!";
+
     system($m2sh, 'load', '-db', $database, '-config', $config);
 
     ok -e $database, "created $database ok";
@@ -63,6 +69,7 @@ EOF
     die "fork failed $!" unless defined $pid;
 
     if(!$pid){
+
         exec($m2sh, 'start', '-db', $database, '-every');
     }
 
