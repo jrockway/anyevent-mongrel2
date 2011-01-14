@@ -42,6 +42,8 @@ around 'parse_request' => sub {
 
     if($hash->{headers}{METHOD} eq 'JSON'){
         $hash->{json_body} = decode_json($hash->{body});
+
+        no warnings 'uninitialized';
         if( $hash->{json_body}{type} eq 'disconnect' ){
             $handle->is_connected(0);
             $handle->is_shutdown(1);

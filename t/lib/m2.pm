@@ -32,7 +32,7 @@ h = Handler( send_spec="$s"
            , recv_ident=""
            )
 
-routes = { "/": h }
+routes = { "/": h, "\@data": h, "<data": h }
 
 main = Server( uuid="$uuid"
              , access_log="/m2access.log"
