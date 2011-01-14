@@ -29,12 +29,18 @@ around 'parse_request' => sub {
 
     my $first_time = 0;
     my $handle = $self->_get_handle_for($hash->{id});
+
+    my $type =
+        $hash->{headers}{METHOD} eq 'JSON' ? 'JSON' :
+        $hash->{headers}{METHOD} eq 'XML'  ? 'XML'  : 'HTTP';
+
     if(!$handle){
         $handle = AnyEvent::Mongrel2::Handle->new(
             mongrel2 => $self,
             uuid     => $hash->{uuid},
             id       => $hash->{id},
             path     => $hash->{path},
+            type     => $type,
         );
         $self->_register_handle($handle);
         $first_time = 1;

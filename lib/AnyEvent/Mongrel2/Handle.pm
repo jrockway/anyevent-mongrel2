@@ -48,6 +48,12 @@ has 'is_shutdown' => (
     default => 0,
 );
 
+has 'type' => (
+    is       => 'ro',
+    isa      => 'Str',
+    required => 1,
+);
+
 sub _read_state_change {}
 
 sub assert_connected {
